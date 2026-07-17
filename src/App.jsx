@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Play, Pause, SkipForward, SkipBack, RefreshCw } from 'lucide-react';
-// Using esm.sh imports so the Canvas preview works correctly!
-import { Client } from 'https://esm.sh/@stomp/stompjs';
-import SockJS from 'https://esm.sh/sockjs-client';
+// Reverted back to standard NPM imports for Vercel deployment!
+import { Client } from '@stomp/stompjs';
+import SockJS from 'sockjs-client';
 
 export default function App() {
   const [algorithm, setAlgorithm] = useState("bubble"); 
@@ -168,3 +168,111 @@ export default function App() {
         </div>
         {currentConfig.type !== 'graph' && (
           <div className="flex flex-col gap-2">
+            <div className="flex justify-between items-end">
+              <label className="text-sm font-semibold text-slate-400">Input Data</label>
+              <button onClick={generateRandomArray} className="text-xs text-blue-400 hover:text-blue-300 transition-colors">Generate Random</button>
+            </div>
+            <input type="text" value={arrayInput} onChange={(e) => validateAndSetInput(e.target.value)} className={`bg-slate-700 p-2 rounded outline-none border transition-colors ${inputError && !inputError.includes('Waking up') ? 'border-red-500 focus:border-red-500' : 'border-slate-600 focus:border-blue-500'}`} />
+            
+            {/* UPDATED: Dynamic status coloring for Loading vs Error */}
+            {inputError && (
+              <span className={`text-xs font-semibold ${inputError.includes('Waking up') ? 'text-yellow-400 animate-pulse' : 'text-red-500'}`}>
+                {inputError}
+              </span>
+            )}
+          </div>
+        )}
+        <button onClick={runAlgorithm} disabled={inputError.length > 0 && !inputError.includes('Waking up')} className={`py-3 rounded font-bold transition-all shadow-lg ${inputError && !inputError.includes('Waking up') ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}>
+          Initialize Visualizer
+        </button>
+      </div>
+
+      <div className="flex-1 flex flex-col relative">
+        <div className="flex-1 flex items-center justify-center p-8 bg-slate-900 relative overflow-hidden">
+          {currentConfig.type === 'array' && activeData && activeData.arrayState && (
+             <div className="flex items-end gap-2 h-64 z-10">
+             {activeData.arrayState.map((value, idx) => (
+                 <motion.div key={idx} layout transition={{ type: "spring", stiffness: 300, damping: 25 }} className={`w-14 flex items-end justify-center rounded-t-md shadow-lg ${activeData.activeIndices.includes(idx) ? 'bg-orange-500' : 'bg-blue-500'}`} style={{ height: `${value * 20}px`, minHeight: '35px' }}>
+                   <span className="mb-2 font-bold text-lg">{value}</span>
+                 </motion.div>
+             ))}
+           </div>
+          )}
+          {currentConfig.type === 'tree' && treeState && (
+             <div className="absolute inset-0 w-full h-full">
+               <svg className="absolute inset-0 w-full h-full z-0 pointer-events-none">
+                 {treeState.edges.map((edge) => {
+                   const fromNode = treeState.nodes.find(n => n.id === edge.fromId);
+                   const toNode = treeState.nodes.find(n => n.id === edge.toId);
+                   if (!fromNode || !toNode) return null;
+                   return <motion.line key={`${edge.fromId}-${edge.toId}`} initial={{ pathLength: 0, opacity: 0 }} animate={{ pathLength: 1, opacity: 1 }} transition={{ duration: 0.5 }} x1={`${fromNode.position}%`} y1={`${fromNode.level}%`} x2={`${toNode.position}%`} y2={`${toNode.level}%`} stroke="#475569" strokeWidth="4" />
+                 })}
+               </svg>
+               {treeState.nodes.map(node => (
+                   <motion.div key={node.id} layout initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 300, damping: 20 }} className={`absolute -translate-x-1/2 -translate-y-1/2 w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg shadow-xl z-10 border-2 ${treeState.activeNodeId === node.id ? 'bg-orange-500 border-orange-300' : 'bg-blue-600 border-blue-400'}`} style={{ left: `${node.position}%`, top: `${node.level}%` }}>{node.value}</motion.div>
+               ))}
+             </div>
+          )}
+          
+          {currentConfig.type === 'graph' && gridState && (
+              <div className="grid gap-[2px] bg-slate-700 p-[2px] rounded border-4 border-slate-800 shadow-2xl z-10 w-full max-w-4xl mt-16" style={{ gridTemplateColumns: 'repeat(20, minmax(0, 1fr))' }}>
+                  {gridState.grid.map((node) => {
+                      let cellColor = "bg-slate-800"; 
+                      if (node.isWall) cellColor = "bg-slate-950"; 
+                      else if (node.isPath) cellColor = "bg-yellow-400"; 
+                      else if (node.isVisited) cellColor = "bg-blue-500"; 
+                      
+                      if (node.isStart) cellColor = "bg-green-500"; 
+                      if (node.isEnd) cellColor = "bg-red-500"; 
+
+                      return (
+                        <motion.div 
+                          key={`${node.row}-${node.col}`} 
+                          initial={node.isVisited || node.isPath || node.isWall ? { scale: 0.3, opacity: 0 } : false} 
+                          animate={{ scale: 1, opacity: 1 }} 
+                          transition={{ duration: 0.2 }} 
+                          className={`w-full h-full aspect-square rounded-sm ${cellColor}`} 
+                        />
+                      );
+                  })}
+              </div>
+          )}
+
+          {!activeData && <div className="text-slate-500 text-lg flex flex-col items-center gap-4"><span>Select an algorithm and click Initialize</span></div>}
+        </div>
+        <div className="absolute top-8 left-1/2 -translate-x-1/2 bg-slate-800 px-6 py-2 rounded-full border border-slate-700 text-sm shadow-lg text-orange-400 font-semibold z-20 whitespace-nowrap">{description}</div>
+        <div className="h-24 bg-slate-800 border-t border-slate-700 flex items-center justify-between px-12 z-20 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.1)]">
+          <div className={`flex items-center gap-4 ${currentConfig.type !== 'array' ? 'opacity-30 pointer-events-none' : ''}`}>
+            <button onClick={() => setCurrentStepIndex(Math.max(0, currentStepIndex - 1))} className="p-2 bg-slate-700 rounded-full hover:bg-slate-600 transition-colors"><SkipBack size={20} /></button>
+            <button onClick={() => setIsPlaying(!isPlaying)} className="p-4 bg-blue-600 rounded-full hover:bg-blue-500 transition-colors shadow-lg shadow-blue-500/30">{isPlaying ? <Pause size={24} /> : <Play size={24} />}</button>
+            <button onClick={() => setCurrentStepIndex(Math.min(steps.length - 1, currentStepIndex + 1))} className="p-2 bg-slate-700 rounded-full hover:bg-slate-600 transition-colors"><SkipForward size={20} /></button>
+            <button onClick={() => setCurrentStepIndex(0)} className="p-2 ml-4 text-slate-400 hover:text-white transition-colors"><RefreshCw size={20} /></button>
+          </div>
+          {currentConfig.type !== 'array' && <span className="text-emerald-400 font-mono text-sm animate-pulse flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-emerald-400"></div>LIVE WEBSOCKET STREAM</span>}
+          <div className={`flex items-center gap-4 ${currentConfig.type !== 'array' ? 'opacity-30 pointer-events-none' : ''}`}>
+            <label className="text-sm font-semibold text-slate-400">Speed</label>
+            <input type="range" min="200" max="2000" step="100" value={2200 - speed} onChange={(e) => setSpeed(2200 - e.target.value)} className="cursor-pointer accent-blue-500" />
+          </div>
+        </div>
+      </div>
+
+      <div className="w-80 bg-slate-800 p-6 flex flex-col gap-6 shadow-xl z-10 border-l border-slate-700">
+        <div>
+          <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3">Complexity</h2>
+          <div className="bg-slate-900 rounded-lg p-4 border border-slate-700 space-y-2">
+            <div className="flex justify-between"><span className="text-slate-400">Time</span><span className="font-mono text-blue-400">{currentConfig.time}</span></div>
+            <div className="flex justify-between"><span className="text-slate-400">Space</span><span className="font-mono text-green-400">{currentConfig.space}</span></div>
+          </div>
+        </div>
+        <div className="flex-1">
+          <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3">Execution Code</h2>
+          <div className="bg-slate-900 rounded-lg p-4 border border-slate-700 font-mono text-sm flex flex-col gap-1 overflow-x-auto">
+            {currentConfig.code.map((code) => (
+              <div key={code.line} className={`py-1 px-2 rounded whitespace-pre transition-colors duration-200 ${activeLine === code.line ? 'bg-blue-600/30 text-blue-300 border-l-2 border-blue-500' : 'text-slate-500 border-l-2 border-transparent'}`}>{code.text}</div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
